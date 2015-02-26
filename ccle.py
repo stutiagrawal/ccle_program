@@ -11,8 +11,6 @@ def load_data_frame(array_exp_file, delimiter='\t', index_col="Description"):
 
     if os.path.isfile(array_exp_file):
         expr = pandas.read_csv(array_exp_file, sep=delimiter)
-    if "Accession" in expr.keys():
-        expr = expr.drop("Accession", axis=1)
 
     expr = expr.drop_duplicates(index_col)
     expr.index = expr[index_col]
@@ -39,7 +37,7 @@ def select_columns(col_names, df):
     for column in df.keys():
         if column not in col_names:
             df = df.drop(column, axis=1)
-    return df
+    return df.sort(axis=1)
 
 def get_correlation(expr, drug, drug_name):
     rows_expr, cols_expr = expr.shape
@@ -49,10 +47,16 @@ def get_correlation(expr, drug, drug_name):
     print "Num of cell lines in drug: %d" %cols_drug
     if(cols_expr == cols_drug):
         for gene in expr.index:
-            (pearson_coeff, p_value) = scipy.stats.pearsonr(expr.loc[gene], drug[drug_name])
+            print gene, repr(gene)
+            (pearson_coeff, p_value) = scipy.stats.pearsonr(expr.loc[gene], drug.loc[drug_name])
             corr[gene] = pearson_coeff
     else:
         raise Exception("number of cell lines do not match")
+    print corr
+    corr = pandas.Series(corr)
+    corr = pandas.DataFrame(corr, columns=["pearson"])
+    corr = corr.sort(columns="pearson")
+    print corr
     return corr
 
 def get_updated_expr(expr, cv_sel):
@@ -96,12 +100,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     expr = load_data_frame(args.expr, index_col="Description")
-    drug = load_data_frame(args.drug_dataset, index_col="COMPOUND_NAME")
+    if "Accession" in expr.keys():
+        expr = expr.drop("Accession", axis=1)
 
+    drug = load_data_frame(args.drug_dataset, index_col="COMPOUND_NAME")
     #Remove cell lines which do not have drug response
-    for i in xrange(len(drug[args.drug])):
-        if drug[args.drug][i] == -1:
-            drug = drug.drop(drug.keys[i], axis=1)
+    to_be_removed = set()
+    for i in xrange(len(drug.loc[args.drug])):
+        if drug.loc[args.drug][i] == -1:
+            print drug.keys()[i]
+            to_be_removed.add(drug.keys()[i])
+
+    for cell_line in to_be_removed:
+        drug = drug.drop(cell_line, axis=1)
 
     #cv_sel = get_coef_var(expr, args.n_features)
     #expr = get_updated_expr(expr, cv_sel)
@@ -115,8 +126,8 @@ if __name__ == "__main__":
     #    print value
     #print expr.ix[0:10, :]
     print "getting correlation"
-    corr = get_correlation(expr, drug, args.drug)
-    print corr
+    corr_sorted = get_correlation(expr, drug, args.drug)
+    print corr_sorted
     #labels = expr["Description"]
     #expr = pandas.DataFrame(expr, index=labels)
     #expr.to_csv("gnf_out_1.txt", sep="\t")
